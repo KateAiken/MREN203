@@ -17,18 +17,6 @@ float a_x, a_y, a_z;
 // Variables to store sample rates from sensor [Hz]
 float a_f, g_f;
 
-double av_ox= 0;
-double av_oy= 0;
-double av_oz= 0;
-
-double sum_ox = 0;
-double sum_oy = 0;
-double sum_oz = 0;
-
-double num_ox = 0;
-double num_oy = 0;
-double num_oz = 0;
-
 byte u = 0;
 
 // Left wheel encoder digital pins
@@ -40,8 +28,6 @@ const byte SIGNAL_R_B = 12;
 // Encoder ticks per (motor) revolution (TPR)
 const int TPR = 3000;
 
-// Wheel radius [m]
-const double RHO = 0.0625;
 
 // Counter to keep track of encoder ticks [integer]
 volatile long encoder_ticks_L = 0;
@@ -72,6 +58,18 @@ double omega = 0;
 // constant
 const double ELL = 0.2775;
 
+// e's
+double e_L;
+double e_R;
+
+// u's
+int u_L = 200;
+int u_R = 200;
+
+//e_sum's
+double e_sum_L = 0;
+double e_sum_R = 0;
+
 // This function is called when SIGNAL_A goes HIGH
 void decodeEncoderTicks() {
   if (digitalRead(SIGNAL_L_B) == LOW) {
@@ -90,33 +88,22 @@ void decodeEncoderTicks() {
   }
 }
 
-// Compute vehicle speed [m/s]
+
 double compute_vehicle_speed(double v_L, double v_R) {
+  // Compute vehicle speed [m/s]
   double v;
   v = 0.5 * (v_L + v_R);
   return v;
 }
-// Compute vehicle turning rate [rad/s]
+
 double compute_vehicle_rate(double v_L, double v_R) {
+  // Compute vehicle turning rate [rad/s]
   double omega;
-  omega = (180/PI)*(1.0 / ELL * (v_R - v_L));
+  omega = (180 / PI) * (1.0 / ELL * (v_R - v_L));
   return omega;
 }
 
-void average(float omega_x, float omega_y, float omega_z){
-  num_ox++;
-  num_oy++;
-  num_oz++;
-  sum_ox = omega_x + sum_ox;
-  sum_oy = omega_y + sum_oy;
-  sum_oz = omega_z + sum_oz;  
-  av_ox = (sum_ox)/num_ox;
-  av_oy = (sum_oy)/num_oy;
-  av_oz = (sum_oz)/num_oz;
-}
-
-
-void checkIMU(){
+void checkIMU() {
   // Read from the accelerometer
   if (IMU.accelerationAvailable()) {
     IMU.readAcceleration(a_x, a_y, a_z);
@@ -133,21 +120,21 @@ void checkIMU(){
   // Read from the gyroscope
   if (IMU.gyroscopeAvailable()) {
     IMU.readGyroscope(omega_x, omega_y, omega_z);
-    average(omega_x, omega_y, omega_z);
+   // average(omega_x, omega_y, omega_z);
 
 
     // Print the gyroscope measurements to the Serial Monitor
-    Serial.print(omega_x-av_ox);
+    Serial.print(omega_x);
     Serial.print("\t");
-    Serial.print(omega_y-av_oy);
+    Serial.print(omega_y);
     Serial.print("\t");
-    Serial.print(omega_z-av_oz);
+    Serial.print(omega_z);
     Serial.print(" deg/s\n");
   }
 }
 
-void checkEncoder(){
- // Get the elapsed time [ms]
+void checkEncoder() {
+  // Get the elapsed time [ms]
   t_now = millis();
 
   if (t_now - t_last >= T) {
@@ -180,7 +167,6 @@ void checkEncoder(){
     Serial.print(omega);
     Serial.print("\n");
 
-
     // Record the current time [ms]
     t_last = t_now;
 
@@ -188,12 +174,33 @@ void checkEncoder(){
     encoder_ticks_L = 0;
     encoder_ticks_R = 0;
   }
-
-  // Set the wheel motor PWM command [0-255]
-  u = 128;
-
 }
 
+// Wheel speed PI controller function
+short PI_controller(double e_now, double e_int, double k_P, double k_I) {
+  short u;
+  u = (short)((k_P * e_now) + (k_I * e_int));
+  if (u > 255) {
+    u = 255;
+  } else if (u < -255) {
+    u = -255;
+  }
+  return u;
+}
+
+double calcError(double speed, double turnRate){
+  double v_des_L = speed- ((turnRate * r)/2);
+  Serial.print("Desired Speed Left: ");
+  Serial.print(v_des_L);
+  e_L = v_des_L - v_L;
+  e_sum_L += e_L;
+  double v_des_R = speed + ((turnRate * r)/2);
+  Serial.print("    Desired Speed Right: ");
+  Serial.print(v_des_R);
+  Serial.print("\n");
+  e_R = v_des_R - v_R; 
+  e_sum_R += e_R;
+}
 
 void setup() {
   // Configure digital pins for output
@@ -206,7 +213,7 @@ void setup() {
   stopmotor();
 
   // Open the serial port at 115200 bps
-  Serial.begin(115200);
+  Serial.begin(9600);
 
   // Wait for serial connection before starting
   while (!Serial) {
@@ -252,30 +259,28 @@ void setup() {
 
 void loop() {
 
-  delay(100);
-  // Play with this code to write open loop commands to a wheel motor
-  turnrightwide(24);
-  turnleftwide(23);
- 
-  // moveforward(1);
+  fastforward();
+  checkEncoder();
+  //checkIMU();
+  calcError(0.5, 0);
+  u_L = PI_controller(e_L , e_sum_L, 200, 0);
+  Serial.print("PWM Left: ");
+  Serial.print(u_L);
+  u_R = PI_controller(e_R , e_sum_R, 200, 0);
+  Serial.print("    PWM Right: ");
+  Serial.print(u_R);
+  Serial.print("\n");
+}
 
 
-  // turnright();
-
-  // movebackwards(1);
-
-  // turnleft();
-
-  // movebackwards(1);
-
-  // turnright();
-
-  // moveforward(1);
-
-  // turnleft();
-
-
-  //stopmotor();
+void fastforward() {
+  digitalWrite(I1, HIGH);
+  digitalWrite(I2, LOW);
+  digitalWrite(I3, LOW);
+  digitalWrite(I4, HIGH);
+  // PWM command to the motor driver
+  analogWrite(EA, u_R);
+  analogWrite(EB, u_L);
 }
 
 void movebackwards(int time) {
@@ -383,7 +388,6 @@ void turnrightwide(int turn_r) {
     checkIMU();
     checkEncoder();
     delay(200);
-    
   }
 }
 
