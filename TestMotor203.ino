@@ -71,36 +71,23 @@ double e_sum_L = 0;
 double e_sum_R = 0;
 
 // This function is called when SIGNAL_A goes HIGH
-void decodeEncoderTicks() {
+void decodeLeftEncoder() {
   if (digitalRead(SIGNAL_L_B) == LOW) {
     // SIGNAL_A leads SIGNAL_B, so count one way
-    encoder_ticks_L++;
-  } else {
-    // SIGNAL_B leads SIGNAL_A, so count the other way
     encoder_ticks_L--;
-  }
-  if (digitalRead(SIGNAL_R_A) == LOW) {
-    // SIGNAL_A leads SIGNAL_B, so count one way
-    encoder_ticks_R--;
   } else {
     // SIGNAL_B leads SIGNAL_A, so count the other way
-    encoder_ticks_R++;
+    encoder_ticks_L++;
   }
 }
-
-
-double compute_vehicle_speed(double v_L, double v_R) {
-  // Compute vehicle speed [m/s]
-  double v;
-  v = 0.5 * (v_L + v_R);
-  return v;
-}
-
-double compute_vehicle_rate(double v_L, double v_R) {
-  // Compute vehicle turning rate [rad/s]
-  double omega;
-  omega = (180 / PI) * (1.0 / ELL * (v_R - v_L));
-  return omega;
+void decodeRightEncoder() {
+  if (digitalRead(SIGNAL_R_B) == LOW) {
+    // SIGNAL_A leads SIGNAL_B, so count one way
+    encoder_ticks_R++;
+  } else {
+    // SIGNAL_B leads SIGNAL_A, so count the other way
+    encoder_ticks_R--;
+  }
 }
 
 void checkIMU() {
@@ -120,7 +107,7 @@ void checkIMU() {
   // Read from the gyroscope
   if (IMU.gyroscopeAvailable()) {
     IMU.readGyroscope(omega_x, omega_y, omega_z);
-   // average(omega_x, omega_y, omega_z);
+    // average(omega_x, omega_y, omega_z);
 
 
     // Print the gyroscope measurements to the Serial Monitor
@@ -143,8 +130,8 @@ void checkEncoder() {
     omega_R = 2.0 * PI * ((double)encoder_ticks_R / (double)TPR) * 1000.0 / (double)(t_now - t_last);
     v_L = r * omega_L;
     v_R = r * omega_R;
-    v = compute_vehicle_speed(v_L, v_R);
-    omega = compute_vehicle_rate(v_L, v_R);
+    v = 0.5 * (v_L + v_R); // [m/s]
+    omega = (180 / PI) * (1.0 / ELL * (v_R - v_L)); // [rad/s]
 
     // Print some stuff to the serial monitor
     Serial.print("LEFT ticks: ");
@@ -177,9 +164,9 @@ void checkEncoder() {
 }
 
 // Wheel speed PI controller function
-short PI_controller(double e_now, double e_int, double k_P, double k_I) {
-  short u;
-  u = (short)((k_P * e_now) + (k_I * e_int));
+int PI_controller(double e_now, double e_int, double k_P, double k_I) {
+  int u;
+  u = (int)((k_P * e_now) + (k_I * e_int));
   if (u > 255) {
     u = 255;
   } else if (u < -255) {
@@ -188,18 +175,23 @@ short PI_controller(double e_now, double e_int, double k_P, double k_I) {
   return u;
 }
 
-double calcError(double speed, double turnRate){
-  double v_des_L = speed- ((turnRate * r)/2);
+void calcError(double speed, double turnRate) {
+  double v_des_L = speed - ((turnRate * ELL) / 2);     // Speed doesnt need to be rad/s code changes turn rate to m/s. units work
   Serial.print("Desired Speed Left: ");
   Serial.print(v_des_L);
-  e_L = v_des_L - v_L;
+  e_L = (v_des_L - v_L) + 1;
   e_sum_L += e_L;
-  double v_des_R = speed + ((turnRate * r)/2);
+  double v_des_R = speed + ((turnRate * ELL) / 2);
   Serial.print("    Desired Speed Right: ");
   Serial.print(v_des_R);
   Serial.print("\n");
-  e_R = v_des_R - v_R; 
+  e_R = (v_des_R - v_R) + 1;
   e_sum_R += e_R;
+  Serial.print("E Left: ");
+  Serial.print(e_L);
+  Serial.print("    E Right: ");
+  Serial.print(e_R);
+  Serial.print("\n");
 }
 
 void setup() {
@@ -249,8 +241,8 @@ void setup() {
   pinMode(SIGNAL_R_B, INPUT);
 
   // Every time the pin goes high, this is a pulse
-  attachInterrupt(digitalPinToInterrupt(SIGNAL_L_A), decodeEncoderTicks, RISING);
-  attachInterrupt(digitalPinToInterrupt(SIGNAL_R_A), decodeEncoderTicks, RISING);
+  attachInterrupt(digitalPinToInterrupt(SIGNAL_L_A), decodeLeftEncoder, RISING);
+  attachInterrupt(digitalPinToInterrupt(SIGNAL_R_A), decodeRightEncoder, RISING);
 
   // Print a message
   Serial.print("Program initialized.");
@@ -262,11 +254,11 @@ void loop() {
   fastforward();
   checkEncoder();
   //checkIMU();
-  calcError(0.5, 0);
-  u_L = PI_controller(e_L , e_sum_L, 200, 0);
+  calcError(1, 0);
+  u_L = PI_controller(e_L, e_sum_L, 215, 0);
   Serial.print("PWM Left: ");
   Serial.print(u_L);
-  u_R = PI_controller(e_R , e_sum_R, 200, 0);
+  u_R = PI_controller(e_R, e_sum_R, 215, 0);
   Serial.print("    PWM Right: ");
   Serial.print(u_R);
   Serial.print("\n");
@@ -281,6 +273,7 @@ void fastforward() {
   // PWM command to the motor driver
   analogWrite(EA, u_R);
   analogWrite(EB, u_L);
+  delay(500);
 }
 
 void movebackwards(int time) {
