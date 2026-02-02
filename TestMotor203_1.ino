@@ -38,7 +38,7 @@ double omega_R = 0.0;
 double omega_L = 0.0;
 
 // Sampling interval for measurements in milliseconds
-const int T = 750;
+const int T = 50;
 
 // Counters for milliseconds during interval
 long t_now = 0;
@@ -69,6 +69,14 @@ int u_R = 200;
 //e_sum's
 double e_sum_L = 0;
 double e_sum_R = 0;
+
+const double I_MAX = 40.0;
+double kFF_L = 220; // feed-forward gain (tune once)
+double kFF_R = 210;  
+const int PWM_MIN = 40; //motor dead-zone clamp
+
+double v_des_L = 0;
+double v_des_R = 0;
 
 // This function is called when SIGNAL_A goes HIGH
 void decodeLeftEncoder() {
@@ -123,15 +131,29 @@ void checkIMU() {
 void checkEncoder() {
   // Get the elapsed time [ms]
   t_now = millis();
-
+ 
   if (t_now - t_last >= T) {
+
+    double dt = (t_now - t_last) / 1000.0;
+
     // Estimate the rotational speed [rad/s]
-    omega_L = 2.0 * PI * ((double)encoder_ticks_L / (double)TPR) * 1000.0 / (double)(t_now - t_last);
-    omega_R = 2.0 * PI * ((double)encoder_ticks_R / (double)TPR) * 1000.0 / (double)(t_now - t_last);
+    omega_L = 2.0 * PI * ((double)encoder_ticks_L / (double)TPR) / dt;
+    omega_R = 2.0 * PI * ((double)encoder_ticks_R / (double)TPR) / dt;
     v_L = r * omega_L;
     v_R = r * omega_R;
+
     v = 0.5 * (v_L + v_R); // [m/s]
-    omega = (180 / PI) * (1.0 / ELL * (v_R - v_L)); // [rad/s]
+    omega =(v_R - v_L) / ELL; // [rad/s]
+
+    e_sum_L += e_L * dt;
+    e_sum_R += e_R * dt;
+    e_sum_L = constrain(e_sum_L, -I_MAX, I_MAX);
+    e_sum_R = constrain(e_sum_R, -I_MAX, I_MAX);
+    
+    if (abs(v) < 0.01) { //Reset integral when stopped
+    e_sum_L = 0;
+    e_sum_R = 0;
+  }
 
     // Print some stuff to the serial monitor
     // Serial.print("LEFT ticks: ");
@@ -148,10 +170,10 @@ void checkEncoder() {
     // Serial.print(omega_R);
     // Serial.print(" rad/s\n");
 
-    Serial.print("Velocity: ");
+    //Serial.print("Velocity: ");
     Serial.print(v);
-    Serial.print(" Turn Rate: ");
-    Serial.print(omega);
+   // Serial.print(" Turn Rate: ");
+    //Serial.print(omega);
     Serial.print("\n");
 
     // Record the current time [ms]
@@ -176,17 +198,16 @@ int PI_controller(double e_now, double e_int, double k_P, double k_I) {
 }
 
 void calcError(double speed, double turnRate) {
-  double v_des_L = speed - ((turnRate * ELL) / 2);     // Speed doesnt need to be rad/s code changes turn rate to m/s. units work
+  v_des_L = speed - turnRate * (ELL/2);     // Speed doesnt need to be rad/s code changes turn rate to m/s. units work
   //Serial.print("Desired Speed Left: ");
   //Serial.print(v_des_L);
-  e_L = (v_des_L - v_L) + 1;
-  e_sum_L += e_L;
-  double v_des_R = speed + ((turnRate * ELL) / 2);
+  e_L = (v_des_L - v_L);
+
+  v_des_R = speed + turnRate * (ELL/2);
  // Serial.print("    Desired Speed Right: ");
  // Serial.print(v_des_R);
  // Serial.print("\n");
-  e_R = (v_des_R - v_R) + 1;
-  e_sum_R += e_R;
+  e_R = (v_des_R - v_R);
   //Serial.print("E Left: ");
  // Serial.print(e_L);
   //Serial.print("    E Right: ");
@@ -252,13 +273,32 @@ void setup() {
 void loop() {
 
   fastforward();
+  //turnright();
   checkEncoder();
   //checkIMU();
   calcError(0.8, 0);
-  u_L = PI_controller(e_L, e_sum_L, 270, 100);
- // Serial.print("PWM Left: ");
- // Serial.print(u_L);
-  u_R = PI_controller(e_R, e_sum_R, 270, 100);
+  
+
+  int u_ff_L = kFF_L * v_des_L; //feed forward
+  int u_ff_R = kFF_R * v_des_R;
+
+  int u_pi_L = PI_controller(e_L, e_sum_L, 160, 15); //PI correction
+  int u_pi_R = PI_controller(e_R, e_sum_R, 160, 15);
+
+  u_L = constrain(u_ff_L + u_pi_L, 0, 255); //Combination of feed forward and PI
+  u_R = constrain(u_ff_R + u_pi_R, 0, 255);
+
+  if (u_L > 0 && u_L < PWM_MIN){ //Prevents motor-dead zone
+    u_L = PWM_MIN; 
+  }
+  if (u_R > 0 && u_R < PWM_MIN){
+    u_R = PWM_MIN;
+  }
+
+//   u_L = PI_controller(e_L, e_sum_L, 170, 18);
+//  // Serial.print("PWM Left: ");
+//  // Serial.print(u_L);
+//   u_R = PI_controller(e_R, e_sum_R, 170, 18);
  // Serial.print("    PWM Right: ");
  // Serial.print(u_R);
   //Serial.print("\n");
