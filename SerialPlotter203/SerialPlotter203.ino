@@ -155,22 +155,22 @@ void checkEncoder() {
     // Serial.print("LEFT ticks: ");
     // Serial.print(encoder_ticks_L);
     // Serial.print("\t");
-    Serial.print("LEFT speed: ");
-    Serial.print(omega_L);
-    Serial.print(" rad/s\n");
+    // Serial.print("LEFT speed: ");
+    // Serial.print(omega_L);
+    // Serial.print(" rad/s\n");
 
-    // Serial.print("RIGHT ticks: ");
-    // Serial.print(encoder_ticks_R);
-    // Serial.print("\t");
-    Serial.print("RIGHT speed: ");
-    Serial.print(omega_R);
-    Serial.print(" rad/s\n");
+    // // Serial.print("RIGHT ticks: ");
+    // // Serial.print(encoder_ticks_R);
+    // // Serial.print("\t");
+    // Serial.print("RIGHT speed: ");
+    // Serial.print(omega_R);
+    // Serial.print(" rad/s\n");
 
-    Serial.print("Velocity: ");
-    Serial.print(v);
-    Serial.print(" Turn Rate: ");
-    Serial.print(omega);
-    Serial.print("\n");
+    // Serial.print("Velocity: ");
+    // Serial.print(v);
+    // Serial.print(" Turn Rate: ");
+    // Serial.print(omega);
+    // Serial.print("\n");
 
     // Record the current time [ms]
     t_last = t_now;
@@ -195,20 +195,20 @@ int PI_controller(double e_now, double e_int, double k_P, double k_I) {
 
 void calcError(double speed, double turnRate) {
   v_des_L = speed - (turnRate * (ELL / 2));  // Speed doesnt need to be rad/s code changes turn rate to m/s. units work
-  Serial.print("Desired Speed Left: ");
-  Serial.print(v_des_L);
+  // Serial.print("Desired Speed Left: ");
+  // Serial.print(v_des_L);
   e_L = (v_des_L - v_L);
 
   v_des_R = speed + (turnRate * (ELL / 2));
-  Serial.print("    Desired Speed Right: ");
-  Serial.print(v_des_R);
-  Serial.print("\n");
+  // Serial.print("    Desired Speed Right: ");
+  // Serial.print(v_des_R);
+  // Serial.print("\n");
   e_R = (v_des_R - v_R);
-  Serial.print("E Left: ");
-  Serial.print(e_L);
-  Serial.print("    E Right: ");
-  Serial.print(e_R);
-  Serial.print("\n");
+  // Serial.print("E Left: ");
+  // Serial.print(e_L);
+  // Serial.print("    E Right: ");
+  // Serial.print(e_R);
+  // Serial.print("\n");
 
   e_sum_L += e_L;
   e_sum_R += e_R;
@@ -234,13 +234,13 @@ void setup() {
     delay(10);
   }
 
-  Serial.println();
+  // Serial.println();
 
   // Check that the board is initialized
   if (!IMU.begin()) {
     // Print an error message if the IMU is not ready
-    Serial.print("Failed to initialize IMU :(");
-    Serial.print("\n");
+    // Serial.print("Failed to initialize IMU :(");
+    // Serial.print("\n");
     while (1) {
       delay(10);
     }
@@ -251,10 +251,10 @@ void setup() {
   g_f = IMU.gyroscopeSampleRate();
 
   // Print these values to the serial window
-  Serial.print("Accelerometer sample rate: ");
-  Serial.println(a_f);
-  Serial.print("Gyroscope sample rate: ");
-  Serial.println(g_f);
+  // Serial.print("Accelerometer sample rate: ");
+  // Serial.println(a_f);
+  // Serial.print("Gyroscope sample rate: ");
+  // Serial.println(g_f);
 
   // Set the pin modes for the encoders
   pinMode(SIGNAL_L_A, INPUT);
@@ -267,8 +267,8 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(SIGNAL_R_A), decodeRightEncoder, RISING);
 
   // Print a message
-  Serial.print("Program initialized.");
-  Serial.print("\n");
+  // Serial.print("Program initialized.");
+  // Serial.print("\n");
 }
 
 void loop() {
@@ -304,12 +304,13 @@ void loop() {
    }
 
   //   u_L = PI_controller(e_L, e_sum_L, 170, 18);
-  Serial.print("PWM Left: ");
+  //Serial.print("PWM Left: ");
   Serial.print(u_L);
+  Serial.print(" ");
   //   u_R = PI_controller(e_R, e_sum_R, 170, 18);
-  Serial.print("    PWM Right: ");
+  //Serial.print("    PWM Right: ");
   Serial.print(u_R);
-  Serial.print("\n");
+  //Serial.print("\n");
 }
 
 
